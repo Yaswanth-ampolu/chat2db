@@ -1,4 +1,4 @@
-"""Main chat view for SQL Agent TUI with ReAct pattern."""
+"""Main chat view for SQL Agent TUI with Belief-Driven Loop Architecture."""
 
 from textual.widgets import Input, RichLog, Label
 from textual.containers import Container, Horizontal
@@ -15,7 +15,7 @@ from .styles import CHAT_VIEW_STYLES
 
 
 class ChatView(Widget):
-    """Main chat interface with ReAct agent support."""
+    """Main chat interface with autonomous SQL agent."""
 
     DEFAULT_CSS = CHAT_VIEW_STYLES
 
@@ -55,15 +55,14 @@ class ChatView(Widget):
     def on_mount(self) -> None:
         """Initialize chat and focus input."""
         messages = self.query_one("#messages", RichLog)
-        messages.write("[bold cyan]🤖 SQL Agent TUI[/bold cyan]\n")
-        messages.write("[dim]Welcome! Use slash commands to get started:[/dim]")
-        messages.write("[dim]  /models - Configure LLM provider and API key[/dim]")
-        messages.write("[dim]  /db - Connect to PostgreSQL database[/dim]")
-        messages.write("[dim]  /help - Show all commands[/dim]")
+        messages.write("[bold cyan]🤖 Autonomous SQL Agent[/bold cyan]\n")
+        messages.write("[dim]This agent explores databases like a cautious engineer:[/dim]")
+        messages.write("[dim]  • Discovers structure before querying[/dim]")
+        messages.write("[dim]  • Maintains beliefs about what it knows[/dim]")
+        messages.write("[dim]  • Adapts its plan based on observations[/dim]")
+        messages.write("[dim]  • Never gives up - investigates failures[/dim]")
         messages.write("")
-        messages.write("[bold yellow]💡 How to copy text:[/bold yellow]")
-        messages.write("[dim]  Linux/Windows: Hold SHIFT while selecting, then CTRL+SHIFT+C[/dim]")
-        messages.write("[dim]  Mac: Hold OPTION while selecting, then CMD+C[/dim]\n")
+        messages.write("[dim]Use /models to configure LLM, /db to connect database[/dim]\n")
 
         input_widget = self.query_one("#user-input", Input)
         input_widget.can_focus = True
@@ -96,13 +95,7 @@ class ChatView(Widget):
             messages.write("[bold yellow]Warning:[/bold yellow] No database connected. Use /db to connect.")
             return
 
-        # Try intent detection for simple queries
-        intent_response = self.intent_detector.process_message(user_input)
-        if intent_response:
-            messages.write(f"\n[bold cyan]⚡ Quick Response:[/bold cyan]\n{intent_response}")
-            return
-
-        # Use full agent with ReAct pattern
+        # Use full autonomous agent
         self.run_worker(
             self._process_agent_streaming(user_input),
             name="agent_processing",
@@ -110,9 +103,8 @@ class ChatView(Widget):
         )
 
     async def _process_agent_streaming(self, user_input: str) -> None:
-        """Process with ReAct pattern - continuous reasoning and tool usage."""
+        """Process with autonomous belief-driven agent."""
         messages = self.query_one("#messages", RichLog)
-        messages.write("\n[dim]🤔 Thinking...[/dim]")
 
         try:
             async for event in self.agent.process_message_streaming(user_input, self.agent_state):
@@ -125,24 +117,81 @@ class ChatView(Widget):
             self.query_one("#user-input", Input).focus()
 
     async def _handle_agent_event(self, event: AgentEvent, messages: RichLog) -> None:
-        """Handle a single agent event."""
+        """Handle agent events and display thinking process."""
 
-        if event.type == AgentEvent.THINKING:
-            iteration = event.data.get("iteration", 1)
-            if iteration > 1:
-                messages.write(f"[dim]🤔 Thinking (step {iteration})...[/dim]")
+        if event.type == AgentEvent.PHASE:
+            phase = event.data.get("phase", "")
+            message = event.data.get("message", "")
+            if phase == "environment_assessment":
+                messages.write(f"\n[bold blue]🔍 Phase: Environment Assessment[/bold blue]")
+                messages.write(f"[dim]{message}[/dim]")
+            elif phase == "planning":
+                messages.write(f"\n[bold blue]📋 Phase: Planning[/bold blue]")
+                messages.write(f"[dim]{message}[/dim]")
+            elif phase == "synthesis":
+                messages.write(f"\n[bold blue]📝 Phase: Synthesis[/bold blue]")
+                messages.write(f"[dim]{message}[/dim]")
+
+        elif event.type == AgentEvent.THINKING:
+            iteration = event.data.get("iteration", "")
+            todo = event.data.get("todo", "")
+            phase = event.data.get("phase", "")
+
+            if phase == "assessment":
+                messages.write("[dim]🧠 Assessing environment...[/dim]")
+            elif todo:
+                messages.write(f"\n[dim]🧠 Working on: {todo}[/dim]")
+            elif iteration:
+                messages.write(f"[dim]🤔 Thinking (iteration {iteration})...[/dim]")
 
         elif event.type == AgentEvent.TOOL_CALL:
             tool_name = event.data.get("tool", "unknown")
             tool_args = event.data.get("args", {})
             args_str = ", ".join(f"{k}={repr(v)[:30]}" for k, v in tool_args.items()) if tool_args else ""
-            messages.write(f"[bold magenta]🔧 Calling:[/bold magenta] [cyan]{tool_name}[/cyan]({args_str})")
+            messages.write(f"[bold magenta]🔧 Tool:[/bold magenta] [cyan]{tool_name}[/cyan]({args_str})")
 
         elif event.type == AgentEvent.TOOL_RESULT:
             tool_name = event.data.get("tool", "unknown")
             result = event.data.get("result", "")
             result_preview = self._format_tool_result(tool_name, result)
             messages.write(f"[dim]   ↳ {result_preview}[/dim]")
+
+        elif event.type == AgentEvent.BELIEF_UPDATE:
+            beliefs = event.data.get("beliefs", "")
+            # Show compact belief summary
+            lines = beliefs.split("\n")
+            key_lines = [l for l in lines if l.startswith("**") or l.startswith("  ✓")][:5]
+            if key_lines:
+                messages.write("[dim]📚 Updated knowledge:[/dim]")
+                for line in key_lines:
+                    messages.write(f"[dim]   {line}[/dim]")
+
+        elif event.type == AgentEvent.TODO_UPDATE:
+            todos = event.data.get("todos", [])
+            if todos:
+                messages.write("\n[bold yellow]📋 TODO List:[/bold yellow]")
+                for todo in todos[:5]:  # Show first 5
+                    status_icon = {
+                        "pending": "⬜",
+                        "in_progress": "🔄",
+                        "completed": "✅",
+                        "blocked": "⛔"
+                    }.get(todo.get("status", "pending"), "?")
+                    messages.write(f"   {status_icon} {todo.get('description', '')[:60]}")
+                if len(todos) > 5:
+                    messages.write(f"   ... and {len(todos) - 5} more")
+
+        elif event.type == AgentEvent.REFLECTION:
+            observation = event.data.get("observation", "")
+            next_action = event.data.get("next_action", "")
+            goal_satisfied = event.data.get("goal_satisfied", False)
+
+            if observation:
+                messages.write(f"\n[bold cyan]💭 Reflection:[/bold cyan] {observation[:150]}...")
+            if next_action and not goal_satisfied:
+                messages.write(f"[dim]   → Next: {next_action}[/dim]")
+            if goal_satisfied:
+                messages.write("[green]✓ Goal appears satisfied[/green]")
 
         elif event.type == AgentEvent.APPROVAL_NEEDED:
             sql = event.data.get("sql", "")
@@ -158,7 +207,7 @@ class ChatView(Widget):
             if approved:
                 messages.write("\n[green]✓ Query approved - executing...[/green]")
             else:
-                messages.write("\n[red]✗ Query rejected[/red]")
+                messages.write("\n[red]✗ Query rejected - agent will try alternative approach[/red]")
 
             # Continue after approval
             async for post_event in self.agent.continue_after_approval(
@@ -173,6 +222,15 @@ class ChatView(Widget):
             content = event.data.get("content", "")
             messages.write(f"\n[bold yellow]Agent:[/bold yellow]\n{content}")
             self.agent_state = event.data.get("state", self.agent_state)
+
+            # Show final beliefs summary if available
+            beliefs = event.data.get("beliefs", "")
+            if beliefs:
+                messages.write("\n[dim]─── Knowledge Summary ───[/dim]")
+                # Extract key facts
+                for line in beliefs.split("\n"):
+                    if line.strip().startswith("✓"):
+                        messages.write(f"[dim]{line}[/dim]")
 
         elif event.type == AgentEvent.ERROR:
             error = event.data.get("error", "Unknown error")
@@ -202,7 +260,7 @@ class ChatView(Widget):
 
             elif tool_name == "inspect_schema":
                 columns = result.get("columns", [])
-                col_names = [c.get("name", c) if isinstance(c, dict) else c for c in columns[:3]]
+                col_names = [c.get("name", c) if isinstance(c, dict) else c for c in columns[:4]]
                 return f"Found {len(columns)} columns: {', '.join(col_names)}..."
 
             elif tool_name == "get_table_relationships":
@@ -214,13 +272,14 @@ class ChatView(Widget):
                 return "✓ SQL is valid" if result.get("valid") else f"❌ {result.get('error', 'Invalid')}"
 
             elif tool_name == "execute_query":
-                rows = result.get("rows", [])
+                # IMPORTANT: tools.py uses "data" not "rows"
+                rows = result.get("data", result.get("rows", []))
+                row_count = result.get("row_count", len(rows) if rows else 0)
                 if rows:
-                    # Show preview of first row
                     first_row = rows[0]
                     preview = str(first_row)[:80] + "..." if len(str(first_row)) > 80 else str(first_row)
-                    return f"Query returned {len(rows)} rows. First: {preview}"
-                return f"Query returned {len(rows)} rows"
+                    return f"Returned {row_count} rows. First: {preview}"
+                return f"Returned 0 rows (will investigate)"
 
         return str(result)[:150]
 
@@ -240,7 +299,11 @@ class ChatView(Widget):
         elif cmd == "/clear":
             messages.clear()
             self.agent_state = None
-            messages.write("[green]✓ Chat cleared[/green]")
+            if self.agent:
+                self.agent._reset_state()
+            messages.write("[green]✓ Chat and agent state cleared[/green]")
+        elif cmd == "/beliefs":
+            self._show_beliefs()
         else:
             messages.write(f"[red]Unknown command: {cmd}[/red]")
             messages.write("[dim]Type /help for available commands[/dim]")
@@ -252,17 +315,42 @@ class ChatView(Widget):
         messages.write("  [cyan]/models[/cyan] - Configure LLM provider")
         messages.write("  [cyan]/db[/cyan] - Connect to PostgreSQL database")
         messages.write("  [cyan]/status[/cyan] - Show current status")
-        messages.write("  [cyan]/clear[/cyan] - Clear chat history")
+        messages.write("  [cyan]/beliefs[/cyan] - Show agent's current knowledge")
+        messages.write("  [cyan]/clear[/cyan] - Clear chat and reset agent")
         messages.write("  [cyan]/help[/cyan] - Show this help")
-        messages.write("\n[bold]How It Works:[/bold]")
-        messages.write("  The agent thinks step-by-step and uses tools dynamically.")
-        messages.write("  It will explore the database, run queries, and adapt based on results.")
-        messages.write("  SQL queries require your approval before execution.")
+        messages.write("\n[bold]How This Agent Works:[/bold]")
+        messages.write("  1. [blue]Assessment[/blue] - Discovers database structure")
+        messages.write("  2. [blue]Planning[/blue] - Creates TODO list based on your question")
+        messages.write("  3. [blue]Execution[/blue] - Works through TODOs, using tools")
+        messages.write("  4. [blue]Reflection[/blue] - Updates beliefs after each action")
+        messages.write("  5. [blue]Adaptation[/blue] - Replans if something fails")
         messages.write("\n[bold]Example Queries:[/bold]")
-        messages.write("  - What tables are in the database?")
-        messages.write("  - How many users are there?")
-        messages.write("  - Show me 5 messages from the messages table")
-        messages.write("  - What are the relationships between tables?")
+        messages.write("  - What tables are in this database?")
+        messages.write("  - Show me the messages from the messages table")
+        messages.write("  - How many users are there and what are their names?")
+        messages.write("  - Explain the relationships between tables")
+
+    def _show_beliefs(self) -> None:
+        """Show agent's current beliefs."""
+        messages = self.query_one("#messages", RichLog)
+        if not self.agent:
+            messages.write("[yellow]Agent not configured[/yellow]")
+            return
+
+        beliefs = self.agent.beliefs.to_context_string()
+        messages.write("\n[bold]Agent's Current Knowledge:[/bold]")
+        messages.write(beliefs)
+
+        if self.agent.todos:
+            messages.write("\n[bold]Current TODO List:[/bold]")
+            for todo in self.agent.todos:
+                status_icon = {
+                    "pending": "⬜",
+                    "in_progress": "🔄",
+                    "completed": "✅",
+                    "blocked": "⛔"
+                }.get(todo.status.value, "?")
+                messages.write(f"  {status_icon} {todo.description}")
 
     async def _configure_models(self) -> None:
         """Configure LLM provider."""
@@ -303,6 +391,11 @@ class ChatView(Widget):
             db_name = self.db_tools.connection_params.get("database", "Unknown")
             self.query_one("#db-status", Label).update(f"DB: {db_name}")
             messages.write(f"\n[green]✓ Connected to: {db_name}[/green]")
+
+            # Reset agent beliefs for new database
+            if self.agent:
+                self.agent._reset_state()
+                messages.write("[dim]Agent knowledge reset for new database[/dim]")
         else:
             messages.write("\n[dim]Configuration cancelled[/dim]")
 
@@ -324,3 +417,9 @@ class ChatView(Widget):
             messages.write(f"  [green]✓[/green] Database: {db_name} @ {db_host}")
         else:
             messages.write("  [red]✗[/red] Database: Not connected (use /db)")
+
+        if self.agent:
+            schemas = len(self.agent.beliefs.known_schemas)
+            tables = sum(len(t) for t in self.agent.beliefs.known_tables.values())
+            facts = len(self.agent.beliefs.proven_facts)
+            messages.write(f"  [blue]📚[/blue] Agent knows: {schemas} schemas, {tables} tables, {facts} proven facts")

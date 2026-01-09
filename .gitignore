@@ -3,3 +3,9 @@ venv/
 ./venv
 ./venv/
 ./venv/
+/.env/
+.env
+*.pyc
+__pycache__
+logs/*
+db.sqlite3
